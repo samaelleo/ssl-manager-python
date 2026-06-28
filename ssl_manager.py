@@ -527,11 +527,25 @@ class CertbotWrapper:
         print("\n" + table_str)
         return True
 
+    @classmethod
+    def select_ca(cls):
+        """Allows the user to select the Certificate Authority (CA)"""
+        ca_options = [
+            "Let's Encrypt (Default - 90 days validity)",
+            "Buypass Go SSL (180 days validity)"
+        ]
+        choice = TerminalUI.select_menu("Select Certificate Authority (CA)", ca_options)
+        if choice == 0:
+            return "letsencrypt", None
+        else:
+            return "buypass", "https://api.buypass.com/acme/directory"
 
     @classmethod
     def issue_standard_certificate(cls):
         """Steps through issuing a standard SSL certificate interactively"""
         TerminalUI.print_header("Issue Standard Domain SSL")
+        
+        ca_name, ca_server = cls.select_ca()
         
         domains_input = TerminalUI.ask_input("Enter domains (comma-separated, e.g., example.com, www.example.com)")
         if not domains_input:
@@ -543,7 +557,7 @@ class CertbotWrapper:
             TerminalUI.print_error("Invalid domains list.")
             return
             
-        email = TerminalUI.ask_input("Enter email (for Let's Encrypt recovery & renewal warnings)")
+        email = TerminalUI.ask_input(f"Enter email (for {ca_name.capitalize()} recovery & renewal warnings)")
         if not email:
             TerminalUI.print_warning("Operation cancelled.")
             return
@@ -558,7 +572,9 @@ class CertbotWrapper:
         method_idx = TerminalUI.select_menu("Select Validation Method", methods)
         
         cmd = ["certbot", "certonly", "--non-interactive", "--agree-tos", "--email", email]
-        
+        if ca_server:
+            cmd.extend(["--server", ca_server])
+            
         for d in domains:
             cmd.extend(["-d", d])
             
@@ -608,11 +624,13 @@ class CertbotWrapper:
                 TerminalUI.print_success("SSL certificate issued successfully!")
         else:
             TerminalUI.print_error("Certbot command failed. Check outputs above for details.")
-
+ 
     @classmethod
     def issue_wildcard_certificate(cls):
-        """Issues a Let's Encrypt wildcard certificate via manual DNS challenge"""
+        """Issues a wildcard certificate via manual DNS challenge"""
         TerminalUI.print_header("Issue Wildcard SSL Certificate")
+        
+        ca_name, ca_server = cls.select_ca()
         
         domain = TerminalUI.ask_input("Enter base domain name (e.g., example.com)")
         if not domain:
@@ -622,14 +640,11 @@ class CertbotWrapper:
         # Standardize domain name (remove wildcard prefix if entered by user)
         domain = domain.replace("*.", "").strip()
         
-        email = TerminalUI.ask_input("Enter email (for Let's Encrypt recovery & renewal warnings)")
+        email = TerminalUI.ask_input(f"Enter email (for {ca_name.capitalize()} recovery & renewal warnings)")
         if not email:
             TerminalUI.print_warning("Operation cancelled.")
             return
             
-        # To get a wildcard cert, we issue it for both 'domain.com' and '*.domain.com'
-        # Utilizing manual mode and DNS challenge verification.
-        # Note: manual commands CANNOT run --non-interactive because they wait for user to set TXT records.
         cmd = [
             "certbot", "certonly",
             "--manual",
@@ -639,7 +654,9 @@ class CertbotWrapper:
             "-d", domain,
             "-d", f"*.{domain}"
         ]
-        
+        if ca_server:
+            cmd.extend(["--server", ca_server])
+            
         dry_run = TerminalUI.ask_confirm("Perform a test dry-run first?", default_yes=True)
         if dry_run:
             cmd.append("--dry-run")
@@ -653,7 +670,6 @@ class CertbotWrapper:
         TerminalUI.press_any_key("Press Enter to launch Certbot manual DNS execution...")
         
         print("\n" + "="*50 + " CERTBOT MANUAL DNS " + "="*50 + "\n")
-        # Run live and stream, allowing interactive key inputs to Certbot
         success = SystemManager.run_cmd_live(full_command)
         print("\n" + "="*116 + "\n")
         

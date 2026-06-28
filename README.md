@@ -9,8 +9,9 @@ A visually polished, zero-dependency interactive Python CLI tool to issue, list,
 ## 🌟 Features
 
 - **Interactive TUI Menu:** Navigate through options using arrow keys (or `j`/`k` Vim keys) and select with Enter.
+- **Multiple Certificate Authorities (CAs):** Supports choosing between **Let's Encrypt** (90-day certificates) and **Buypass Go SSL** (180-day certificates) during domain issuance.
 - **Multiple Certificate Types:**
-  - **Standard Domain:** Automated HTTP/Standalone issuance via Let's Encrypt.
+  - **Standard Domain:** Automated HTTP/Standalone issuance.
   - **Wildcard Domain:** Automated manual DNS challenge verification (covers both `domain.com` and `*.domain.com`).
   - **Let's Encrypt IP Address:** Generates a publicly trusted short-lived SSL certificate for public IPs using Let's Encrypt's `shortlived` profile (valid for 6 days).
   - **Self-Signed IP Address:** Generates a secure self-signed SSL certificate with IP Subject Alternative Name (SAN) using OpenSSL (valid for 365 days).
@@ -59,8 +60,9 @@ Distributed under the MIT License. See [LICENSE](file:///c:/Users/Samael/Pycharm
 ## 🌟 ویژگی‌ها
 
 - **منوی تعاملی پیشرفته:** امکان پیمایش گزینه‌ها با کلیدهای جهت‌نمای بالا و پایین (یا کلیدهای Vim یعنی `j`/`k`) و انتخاب با کلید Enter.
+- **پشتیبانی از مراجع صدور مختلف (CAs):** امکان انتخاب بین **Let's Encrypt** (با اعتبار ۹۰ روزه) و **Buypass Go SSL** (با اعتبار ۱۸۰ روزه) قبل از صدور گواهی‌های دامنه.
 - **انواع مختلف گواهی‌نامه:**
-  - **دامنه استاندارد (Standard):** صدور خودکار با متدهای HTTP/Standalone توسط Let's Encrypt.
+  - **دامنه استاندارد (Standard):** صدور خودکار با متدهای HTTP/Standalone.
   - **دامنه وایلدکارد (Wildcard):** صدور گواهی وایلدکارد (شامل `domain.com` و `*.domain.com`) از طریق تأیید رکورد DNS TXT به طور تعاملی.
   - **آی‌پی با Let's Encrypt:** تولید گواهی معتبر عمومی برای آی‌پی‌های عمومی با اعتبار ۶ روزه (با قابلیت تمدید خودکار).
   - **آی‌پی خودامضا (Self-Signed):** تولید گواهی خودامضا و ایمن با هدر IP SAN با استفاده از OpenSSL با اعتبار ۳۶۵ روزه.
