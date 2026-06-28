@@ -531,21 +531,30 @@ class CertbotWrapper:
     def select_ca(cls):
         """Allows the user to select the Certificate Authority (CA)"""
         ca_options = [
-            "Let's Encrypt (Default - 90 days validity)",
-            "Buypass Go SSL (180 days validity)"
+            "Let's Encrypt (Default - 90 days validity, no account needed)",
+            "ZeroSSL (90 days validity, requires free ZeroSSL account & EAB credentials)"
         ]
         choice = TerminalUI.select_menu("Select Certificate Authority (CA)", ca_options)
         if choice == 0:
-            return "letsencrypt", None
+            return "letsencrypt", None, None, None
         else:
-            return "buypass", "https://api.buypass.com/acme/directory"
+            TerminalUI.print_info(
+                "ZeroSSL requires External Account Binding (EAB) credentials.\n"
+                "You can generate them for free in your ZeroSSL dashboard under Developer Settings -> EAB Credentials."
+            )
+            eab_kid = TerminalUI.ask_input("Enter ZeroSSL EAB KID")
+            eab_hmac = TerminalUI.ask_input("Enter ZeroSSL EAB HMAC Key")
+            if not eab_kid or not eab_hmac:
+                TerminalUI.print_error("EAB credentials are required for ZeroSSL. Falling back to Let's Encrypt.")
+                return "letsencrypt", None, None, None
+            return "zerossl", "https://acme.zerossl.com/v2/DV90", eab_kid, eab_hmac
 
     @classmethod
     def issue_standard_certificate(cls):
         """Steps through issuing a standard SSL certificate interactively"""
         TerminalUI.print_header("Issue Standard Domain SSL")
         
-        ca_name, ca_server = cls.select_ca()
+        ca_name, ca_server, eab_kid, eab_hmac = cls.select_ca()
         
         domains_input = TerminalUI.ask_input("Enter domains (comma-separated, e.g., example.com, www.example.com)")
         if not domains_input:
@@ -586,13 +595,23 @@ class CertbotWrapper:
         
         # Helper to construct certbot command
         def build_cmd(is_dry):
-            server_url = ca_server
-            if is_dry and ca_name == "buypass":
-                server_url = "https://api.test4.buypass.no/acme/directory"
-                
             command = ["certbot", "certonly", "--non-interactive", "--agree-tos", "--email", email]
-            if server_url:
-                command.extend(["--server", server_url])
+            
+            # ZeroSSL does not support dry-run on their production endpoint.
+            # Fall back to Let's Encrypt staging for dry-runs to verify webserver validation routing.
+            if is_dry:
+                if ca_name == "zerossl":
+                    # Omit ZeroSSL custom server and EAB to let Certbot default to Let's Encrypt staging
+                    pass
+                else:
+                    # Let's Encrypt default staging or custom CAs (if staging is supported)
+                    if ca_server:
+                        command.extend(["--server", ca_server])
+            else:
+                if ca_server:
+                    command.extend(["--server", ca_server])
+                if eab_kid and eab_hmac:
+                    command.extend(["--eab-kid", eab_kid, "--eab-hmac-key", eab_hmac])
                 
             for d in domains:
                 command.extend(["-d", d])
@@ -644,7 +663,7 @@ class CertbotWrapper:
         """Issues a wildcard certificate via manual DNS challenge"""
         TerminalUI.print_header("Issue Wildcard SSL Certificate")
         
-        ca_name, ca_server = cls.select_ca()
+        ca_name, ca_server, eab_kid, eab_hmac = cls.select_ca()
         
         domain = TerminalUI.ask_input("Enter base domain name (e.g., example.com)")
         if not domain:
@@ -663,10 +682,6 @@ class CertbotWrapper:
         
         # Helper to construct wildcard command
         def build_wildcard_cmd(is_dry):
-            server_url = ca_server
-            if is_dry and ca_name == "buypass":
-                server_url = "https://api.test4.buypass.no/acme/directory"
-                
             command = [
                 "certbot", "certonly",
                 "--manual",
@@ -676,8 +691,19 @@ class CertbotWrapper:
                 "-d", domain,
                 "-d", f"*.{domain}"
             ]
-            if server_url:
-                command.extend(["--server", server_url])
+            
+            # ZeroSSL fallback to Let's Encrypt staging for dry-runs
+            if is_dry:
+                if ca_name == "zerossl":
+                    pass
+                else:
+                    if ca_server:
+                        command.extend(["--server", ca_server])
+            else:
+                if ca_server:
+                    command.extend(["--server", ca_server])
+                if eab_kid and eab_hmac:
+                    command.extend(["--eab-kid", eab_kid, "--eab-hmac-key", eab_hmac])
                 
             if is_dry:
                 command.append("--dry-run")
