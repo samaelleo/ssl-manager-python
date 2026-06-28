@@ -8,13 +8,13 @@ A visually polished, zero-dependency interactive Python CLI tool to issue, list,
 
 ## 🌟 Features
 
-- **Interactive TUI Menu:** Navigate through options using arrow keys (or `j`/`k` Vim keys) and select with Enter.
-- **Multiple Certificate Authorities (CAs):** Supports choosing between **Let's Encrypt** (90-day certificates) and **Buypass Go SSL** (180-day certificates) during domain issuance.
+- **Multiple Certificate Authorities (CAs):** Supports choosing between **Let's Encrypt** (Default - zero config) and **ZeroSSL** (Requires free account & EAB credentials) during domain issuance.
 - **Multiple Certificate Types:**
   - **Standard Domain:** Automated HTTP/Standalone issuance.
   - **Wildcard Domain:** Automated manual DNS challenge verification (covers both `domain.com` and `*.domain.com`).
   - **Let's Encrypt IP Address:** Generates a publicly trusted short-lived SSL certificate for public IPs using Let's Encrypt's `shortlived` profile (valid for 6 days).
   - **Self-Signed IP Address:** Generates a secure self-signed SSL certificate with IP Subject Alternative Name (SAN) using OpenSSL (valid for 365 days).
+- **Certificate Copier:** Select any active certificate from a list and copy its real `fullchain.pem` and `privkey.pem` files (fully resolving symlinks) to a custom destination folder on your server.
 - **Zero External Dependencies:** Built entirely with Python's standard library. Works out-of-the-box on any Linux server.
 - **Auto-Installation:** Automatically detects your distribution package manager (`apt`, `dnf`, `yum`, `pacman`) and installs Certbot with Apache/Nginx plugins if they are missing.
 - **Polished Visuals:** Colored ANSI outputs for clean status messages, success/error banners, and a dynamic box-drawn certificates table.
@@ -42,8 +42,9 @@ TMP_FILE=$(mktemp) && curl -sSL https://raw.githubusercontent.com/samaelleo/ssl-
 4. **Issue Self-Signed IP SSL:** Generates a 365-day self-signed certificate with IP SAN using OpenSSL.
 5. **List all SSL Certificates:** Parses Let's Encrypt certificates database and `/etc/letsencrypt/live` directories to render a beautiful terminal table with color-coded days remaining (Green for safe, Yellow for renewal warnings, Red for critical/expired). Lists both Let's Encrypt and Self-Signed IP certificates.
 6. **Renew SSL Certificates:** Triggers Certbot's renew command with interactive option for a Dry Run.
-7. **Delete an SSL Certificate:** Select a certificate from an interactive list and safely delete it. For self-signed certificates, it automatically deletes their directory from the disk.
-8. **Configure Web Server Reload Hooks:** Automates writing a reload script to `/etc/letsencrypt/renewal-hooks/post/` that runs every time a certificate is successfully renewed, ensuring Nginx/Apache reloads and applies the new certificate.
+7. **Copy Certificate Files to Custom Path:** Select an active certificate from the list, input a destination directory, and copy the actual (resolved) certificate and private key files to that directory. Automatically creates the target directory if requested.
+8. **Delete an SSL Certificate:** Select a certificate from an interactive list and safely delete it. For self-signed certificates, it automatically deletes their directory from the disk.
+9. **Configure Web Server Reload Hooks:** Automates writing a reload script to `/etc/letsencrypt/renewal-hooks/post/` that runs every time a certificate is successfully renewed, ensuring Nginx/Apache reloads and applies the new certificate.
 
 ---
 
@@ -60,12 +61,13 @@ Distributed under the MIT License. See [LICENSE](file:///c:/Users/Samael/Pycharm
 ## 🌟 ویژگی‌ها
 
 - **منوی تعاملی پیشرفته:** امکان پیمایش گزینه‌ها با کلیدهای جهت‌نمای بالا و پایین (یا کلیدهای Vim یعنی `j`/`k`) و انتخاب با کلید Enter.
-- **پشتیبانی از مراجع صدور مختلف (CAs):** امکان انتخاب بین **Let's Encrypt** (با اعتبار ۹۰ روزه) و **Buypass Go SSL** (با اعتبار ۱۸۰ روزه) قبل از صدور گواهی‌های دامنه.
+- **پشتیبانی از مراجع صدور مختلف (CAs):** امکان انتخاب بین **Let's Encrypt** (بدون نیاز به تنظیمات) و **ZeroSSL** (با نیاز به اکانت رایگان و مشخصات EAB) قبل از صدور گواهی‌های دامنه.
 - **انواع مختلف گواهی‌نامه:**
   - **دامنه استاندارد (Standard):** صدور خودکار با متدهای HTTP/Standalone.
   - **دامنه وایلدکارد (Wildcard):** صدور گواهی وایلدکارد (شامل `domain.com` و `*.domain.com`) از طریق تأیید رکورد DNS TXT به طور تعاملی.
   - **آی‌پی با Let's Encrypt:** تولید گواهی معتبر عمومی برای آی‌پی‌های عمومی با اعتبار ۶ روزه (با قابلیت تمدید خودکار).
   - **آی‌پی خودامضا (Self-Signed):** تولید گواهی خودامضا و ایمن با هدر IP SAN با استفاده از OpenSSL با اعتبار ۳۶۵ روزه.
+- **کپی کردن گواهی‌ها:** امکان انتخاب یک گواهی از لیست و کپی کردن اصل فایل‌های گواهی و کلید خصوصی (با حل کامل لینک‌های میانبر سیستم‌عامل) به مسیر دلخواه روی سرور.
 - **بدون نیاز به نصب پکیج:** کاملاً با استفاده از کتابخانه‌های استاندارد پایتون نوشته شده و روی تمام سرورها فوراً اجرا می‌شود.
 - **نصب خودکار Certbot:** شناسایی خودکار مدیر بسته توزیع‌های مختلف لینوکس (`apt`, `dnf`, `yum`, `pacman`) و نصب برنامه Certbot همراه با پلاگین‌های وب‌سرور در صورت عدم وجود.
 - **ظاهر بصری و خوانا:** استفاده از کدهای رنگی استاندارد ANSI برای پیام‌ها، جدول‌های منظم متنی و کادرهای موفقیت/خطا.
@@ -93,5 +95,6 @@ TMP_FILE=$(mktemp) && curl -sSL https://raw.githubusercontent.com/samaelleo/ssl-
 ۴. **صدور گواهی آی‌پی خودامضا:** صدور گواهی خودامضا با هدر IP SAN با اعتبار ۳۶۵ روزه با ابزار OpenSSL.
 ۵. **مشاهده لیست گواهی‌ها:** استخراج اطلاعات گواهی‌های فعال Let's Encrypt و مسیر `/etc/letsencrypt/live` و نمایش آن‌ها در یک جدول متنی بسیار زیبا همراه با هایلایت کردن تاریخ انقضا (شامل گواهی‌های Let's Encrypt و خودامضا).
 ۶. **تمدید گواهی‌ها:** تمدید دستی گواهی‌های Let's Encrypt به همراه گزینه تست آزمایشی.
-۷. **حذف گواهی:** انتخاب و حذف کاملاً امن یکی از گواهی‌های فعال از لیست. در مورد گواهی‌های خودامضا، پوشه مربوطه را مستقیماً از روی دیسک پاک می‌کند.
-۸. **تنظیم هوک بارگذاری مجدد وب‌سرور:** نوشتن خودکار اسکریپت بارگذاری مجدد وب‌سرور در پوشه `/etc/letsencrypt/renewal-hooks/post/` تا وب‌سرور بلافاصله پس از تمدید موفق گواهی‌ها، پیکربندی جدید را اعمال کند و از خطای انقضای کش وب‌سرور جلوگیری شود.
+۷. **کپی فایل‌های گواهی به آدرس دلخواه:** انتخاب یک گواهی از لیست، دریافت مسیر خروجی و کپی کردن اصل فایل‌های گواهی و کلید خصوصی (نه میانبرها) به آن آدرس.
+۸. **حذف گواهی:** انتخاب و حذف کاملاً امن یکی از گواهی‌های فعال از لیست. در مورد گواهی‌های خودامضا، پوشه مربوطه را مستقیماً از روی دیسک پاک می‌کند.
+۹. **تنظیم هوک بارگذاری مجدد وب‌سرور:** نوشتن خودکار اسکریپت بارگذاری مجدد وب‌سرور در پوشه `/etc/letsencrypt/renewal-hooks/post/` تا وب‌سرور بلافاصله پس از تمدید موفق گواهی‌ها، پیکربندی جدید را اعمال کند و از خطای انقضای کش وب‌سرور جلوگیری شود.

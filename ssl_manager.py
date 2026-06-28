@@ -1024,6 +1024,75 @@ echo "[$(date)] Executing SSL renewal hook: {reload_command}" >> /var/log/certbo
         except Exception as e:
             TerminalUI.print_error(f"Failed to create renewal hook: {e}")
 
+    @classmethod
+    def copy_certificate_files(cls):
+        """Copies real fullchain.pem and privkey.pem files for a selected certificate to a custom path"""
+        TerminalUI.print_header("Copy Certificate Files")
+        
+        certs = cls.get_all_certificates()
+        if not certs:
+            TerminalUI.print_warning("No active certificates found to copy.")
+            return
+            
+        options = []
+        for c in certs:
+            cert_type = "Self-Signed" if c["is_self_signed"] else "Let's Encrypt/ZeroSSL"
+            options.append(f"{c['name']} ({cert_type} - Domains: {c['domains'].replace(' ', ', ')})")
+        options.append("Back to Main Menu")
+        
+        selected_idx = TerminalUI.select_menu("Select Certificate to Copy", options)
+        if selected_idx == len(certs):
+            return
+            
+        cert_data = certs[selected_idx]
+        src_cert = cert_data["cert_path"]
+        src_key = cert_data["key_path"]
+        
+        if not os.path.exists(src_cert) or not os.path.exists(src_key):
+            TerminalUI.print_error("Source certificate files do not exist or are inaccessible.")
+            return
+            
+        dst_dir = TerminalUI.ask_input("Enter destination directory path (e.g. /etc/nginx/certs)")
+        if not dst_dir:
+            TerminalUI.print_warning("Operation cancelled.")
+            return
+            
+        dst_dir = os.path.abspath(dst_dir)
+        
+        if not os.path.exists(dst_dir):
+            create = TerminalUI.ask_confirm(f"Directory '{dst_dir}' does not exist. Create it?")
+            if create:
+                try:
+                    os.makedirs(dst_dir, exist_ok=True)
+                except Exception as e:
+                    TerminalUI.print_error(f"Failed to create directory: {e}")
+                    return
+            else:
+                TerminalUI.print_warning("Operation cancelled.")
+                return
+                
+        dst_cert = os.path.join(dst_dir, "fullchain.pem")
+        dst_key = os.path.join(dst_dir, "privkey.pem")
+        
+        try:
+            # Resolve symlinks to get real target files, ensuring we copy the actual contents
+            real_cert = os.path.realpath(src_cert)
+            real_key = os.path.realpath(src_key)
+            
+            shutil.copy2(real_cert, dst_cert)
+            shutil.copy2(real_key, dst_key)
+            
+            # Restrict permissions on destination for security best practices
+            if os.name != 'nt':
+                os.chmod(dst_key, 0o600)
+                os.chmod(dst_cert, 0o644)
+                
+            TerminalUI.print_success(f"Certificate files copied successfully to '{dst_dir}'!")
+            TerminalUI.print_info(f"Copied: fullchain.pem -> {dst_cert}")
+            TerminalUI.print_info(f"Copied: privkey.pem -> {dst_key}")
+        except Exception as e:
+            TerminalUI.print_error(f"Failed to copy certificate files: {e}")
+
 
 def main():
     TerminalUI.clear_screen()
@@ -1049,6 +1118,7 @@ def main():
             "Issue IP Address SSL Certificate (Self-Signed - 365 days)",
             "List all SSL Certificates",
             "Renew SSL Certificates",
+            "Copy Certificate Files to Custom Path",
             "Delete an SSL Certificate",
             "Configure Web Server Reload Hooks",
             "Exit"
@@ -1073,10 +1143,12 @@ def main():
         elif choice == 5:
             CertbotWrapper.renew_certificates()
         elif choice == 6:
-            CertbotWrapper.delete_certificate()
+            CertbotWrapper.copy_certificate_files()
         elif choice == 7:
-            CertbotWrapper.configure_renewal_hooks()
+            CertbotWrapper.delete_certificate()
         elif choice == 8:
+            CertbotWrapper.configure_renewal_hooks()
+        elif choice == 9:
             TerminalUI.clear_screen()
             print(f"\n{Colors.BOLD}{Colors.GREEN}Thank you for using SSL Manager! Goodbye.{Colors.RESET}\n")
             break
