@@ -16,6 +16,7 @@ import sys
 import subprocess
 import re
 import time
+import shutil
 
 # Attempt to import termios and tty for interactive key capture (Unix/Linux only)
 try:
@@ -421,15 +422,74 @@ class CertbotWrapper:
                 "days_left": days_left,
                 "status": status,
                 "cert_path": cert_path,
-                "key_path": key_path
+                "key_path": key_path,
+                "is_self_signed": False
             })
             
         return certs
 
     @classmethod
+    def get_all_certificates(cls):
+        """Retrieves Certbot certificates and scans for manual/self-signed IP certificates"""
+        certs = cls.get_certificates()
+        cert_names = {c["name"] for c in certs}
+        
+        live_dir = "/etc/letsencrypt/live"
+        if os.name == 'nt':
+            live_dir = "./mock_certs"
+            
+        if os.path.exists(live_dir):
+            for name in os.listdir(live_dir):
+                if name == "README" or name in cert_names:
+                    continue
+                cert_path = os.path.join(live_dir, name, "fullchain.pem")
+                key_path = os.path.join(live_dir, name, "privkey.pem")
+                if os.path.exists(cert_path) and os.path.exists(key_path):
+                    # Parse utilizing openssl x509
+                    success, stdout, _ = SystemManager.run_cmd(f"openssl x509 -in {cert_path} -noout -enddate -subject", get_output=True)
+                    if success:
+                        cn_match = re.search(r'CN\s*=\s*([^,\n]+)', stdout)
+                        cn = cn_match.group(1).strip() if cn_match else name
+                        
+                        expiry_match = re.search(r'notAfter=(.+)', stdout)
+                        expiry_str = expiry_match.group(1).strip() if expiry_match else "UNKNOWN"
+                        
+                        days_left = 0
+                        status = "EXPIRED"
+                        if expiry_str != "UNKNOWN":
+                            try:
+                                t_expiry = None
+                                clean_expiry = re.sub(r'\s+', ' ', expiry_str)
+                                for fmt in ('%b %d %H:%M:%S %Y %Z', '%b %d %H:%M:%S %Y'):
+                                    try:
+                                        t_expiry = time.strptime(clean_expiry, fmt)
+                                        break
+                                    except ValueError:
+                                        continue
+                                if t_expiry:
+                                    expiry_epoch = time.mktime(t_expiry)
+                                    days_left = int((expiry_epoch - time.time()) / 86400)
+                                    if days_left > 0:
+                                        status = "VALID"
+                            except Exception:
+                                pass
+                                
+                        certs.append({
+                            "name": name,
+                            "domains": cn,
+                            "expiry": expiry_str + " (Manual/Self-Signed)",
+                            "days_left": days_left,
+                            "status": status,
+                            "cert_path": cert_path,
+                            "key_path": key_path,
+                            "is_self_signed": True
+                        })
+        return certs
+
+    @classmethod
     def display_certificates(cls):
         """Displays all certificates in a beautiful table format"""
-        certs = cls.get_certificates()
+        certs = cls.get_all_certificates()
         
         if not certs:
             TerminalUI.print_warning("No SSL Certificates found in this server.")
@@ -458,6 +518,8 @@ class CertbotWrapper:
                 domain_list = domain_list[:37] + "..."
                 
             expiry_short = c["expiry"].split(" (")[0]
+            if "Manual/Self-Signed" in c["expiry"]:
+                expiry_short += " (Self-Signed)"
             
             rows.append([c["name"], domain_list, expiry_short, days_str])
             
@@ -467,8 +529,31 @@ class CertbotWrapper:
 
     @classmethod
     def issue_new_certificate(cls):
-        """Steps through issuing a new SSL certificate interactively"""
-        TerminalUI.print_header("Issue New SSL Certificate")
+        """Unified issuance wizard containing standard, wildcard, and self-signed IP options"""
+        TerminalUI.print_header("Issue SSL Certificate Wizard")
+        
+        wizard_options = [
+            "Standard Domain Certificate (Let's Encrypt Nginx/Apache/Standalone)",
+            "Wildcard Domain Certificate (Let's Encrypt manual DNS challenge)",
+            "IP Address Certificate (Self-Signed OpenSSL SAN)",
+            "Back to Main Menu"
+        ]
+        
+        choice = TerminalUI.select_menu("Select Certificate Type", wizard_options)
+        
+        if choice == 0:
+            cls.issue_standard_certificate()
+        elif choice == 1:
+            cls.issue_wildcard_certificate()
+        elif choice == 2:
+            cls.issue_ip_certificate()
+        elif choice == 3:
+            return
+
+    @classmethod
+    def issue_standard_certificate(cls):
+        """Steps through issuing a standard SSL certificate interactively"""
+        TerminalUI.print_header("Issue Standard Domain SSL")
         
         domains_input = TerminalUI.ask_input("Enter domains (comma-separated, e.g., example.com, www.example.com)")
         if not domains_input:
@@ -547,6 +632,139 @@ class CertbotWrapper:
             TerminalUI.print_error("Certbot command failed. Check outputs above for details.")
 
     @classmethod
+    def issue_wildcard_certificate(cls):
+        """Issues a Let's Encrypt wildcard certificate via manual DNS challenge"""
+        TerminalUI.print_header("Issue Wildcard SSL Certificate")
+        
+        domain = TerminalUI.ask_input("Enter base domain name (e.g., example.com)")
+        if not domain:
+            TerminalUI.print_warning("Operation cancelled.")
+            return
+            
+        # Standardize domain name (remove wildcard prefix if entered by user)
+        domain = domain.replace("*.", "").strip()
+        
+        email = TerminalUI.ask_input("Enter email (for Let's Encrypt recovery & renewal warnings)")
+        if not email:
+            TerminalUI.print_warning("Operation cancelled.")
+            return
+            
+        # To get a wildcard cert, we issue it for both 'domain.com' and '*.domain.com'
+        # Utilizing manual mode and DNS challenge verification.
+        # Note: manual commands CANNOT run --non-interactive because they wait for user to set TXT records.
+        cmd = [
+            "certbot", "certonly",
+            "--manual",
+            "--preferred-challenges", "dns",
+            "--email", email,
+            "--agree-tos",
+            "-d", domain,
+            "-d", f"*.{domain}"
+        ]
+        
+        dry_run = TerminalUI.ask_confirm("Perform a test dry-run first?", default_yes=True)
+        if dry_run:
+            cmd.append("--dry-run")
+            
+        full_command = " ".join(cmd)
+        
+        TerminalUI.print_info("Wildcard SSL requires creating a DNS TXT record in your DNS provider.")
+        TerminalUI.print_warning("This command is interactive. Follow Certbot prompts to add DNS records.")
+        TerminalUI.print_info(f"Running Command: {full_command}")
+        
+        TerminalUI.press_any_key("Press Enter to launch Certbot manual DNS execution...")
+        
+        print("\n" + "="*50 + " CERTBOT MANUAL DNS " + "="*50 + "\n")
+        # Run live and stream, allowing interactive key inputs to Certbot
+        success = SystemManager.run_cmd_live(full_command)
+        print("\n" + "="*116 + "\n")
+        
+        if success:
+            if dry_run:
+                TerminalUI.print_success("Dry-run wildcard validation succeeded!")
+                run_real = TerminalUI.ask_confirm("Issue the actual wildcard certificate now?", default_yes=True)
+                if run_real:
+                    cmd.remove("--dry-run")
+                    real_command = " ".join(cmd)
+                    print("\n" + "="*50 + " CERTBOT MANUAL DNS " + "="*50 + "\n")
+                    real_success = SystemManager.run_cmd_live(real_command)
+                    print("\n" + "="*116 + "\n")
+                    if real_success:
+                        TerminalUI.print_success(f"Wildcard certificate for *.{domain} and {domain} issued successfully!")
+                    else:
+                        TerminalUI.print_error("Failed to issue wildcard certificate.")
+            else:
+                TerminalUI.print_success(f"Wildcard certificate for *.{domain} and {domain} issued successfully!")
+        else:
+            TerminalUI.print_error("Certbot manual wildcard execution failed.")
+
+    @classmethod
+    def issue_ip_certificate(cls):
+        """Generates a self-signed SSL certificate with IP Subject Alternative Name (SAN) using OpenSSL"""
+        TerminalUI.print_header("Issue IP Address SSL Certificate (Self-Signed)")
+        
+        ip = TerminalUI.ask_input("Enter IP address (e.g., 1.2.3.4)")
+        if not ip:
+            TerminalUI.print_warning("Operation cancelled.")
+            return
+            
+        # Basic validation (looks like IPv4 or IPv6)
+        if not re.match(r'^(\d{1,3}\.){3}\d{1,3}$', ip) and not ':' in ip:
+            TerminalUI.print_error("Invalid IP address format.")
+            return
+            
+        cert_dir = f"/etc/letsencrypt/live/{ip}"
+        if os.name == 'nt':
+            cert_dir = f"./mock_certs/{ip}"
+            
+        TerminalUI.print_info(f"Generating self-signed certificate for IP: {ip}")
+        
+        # OpenSSL config template
+        ssl_config = f"""[req]
+default_bits = 2048
+distinguished_name = req_distinguished_name
+x509_extensions = v3_req
+prompt = no
+
+[req_distinguished_name]
+CN = {ip}
+
+[v3_req]
+keyUsage = keyEncipherment, dataEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+
+[alt_names]
+IP.1 = {ip}
+"""
+        # Create temp config file
+        config_path = "/tmp/openssl_ip.conf" if os.name != 'nt' else "./openssl_ip.conf"
+        try:
+            os.makedirs(cert_dir, exist_ok=True)
+            with open(config_path, 'w') as f:
+                f.write(ssl_config)
+                
+            cert_path = os.path.join(cert_dir, "fullchain.pem")
+            key_path = os.path.join(cert_dir, "privkey.pem")
+            
+            cmd = f"openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout {key_path} -out {cert_path} -config {config_path}"
+            
+            success = SystemManager.run_cmd_live(cmd)
+            
+            # Cleanup config file
+            if os.path.exists(config_path):
+                os.remove(config_path)
+                
+            if success:
+                TerminalUI.print_success(f"Self-signed SSL certificate generated successfully for IP: {ip}!")
+                TerminalUI.print_info(f"Certificate Path: {cert_path}")
+                TerminalUI.print_info(f"Private Key Path: {key_path}")
+            else:
+                TerminalUI.print_error("OpenSSL generation failed.")
+        except Exception as e:
+            TerminalUI.print_error(f"Error generating certificate: {e}")
+
+    @classmethod
     def renew_certificates(cls):
         """Runs the Certbot renewal command manually"""
         TerminalUI.print_header("Renew SSL Certificates")
@@ -572,14 +790,15 @@ class CertbotWrapper:
         """Displays list of active certificates, lets user select one, and deletes it"""
         TerminalUI.print_header("Delete SSL Certificate")
         
-        certs = cls.get_certificates()
+        certs = cls.get_all_certificates()
         if not certs:
             TerminalUI.print_warning("No certificates found to delete.")
             return
             
         options = []
         for c in certs:
-            options.append(f"{c['name']} (Domains: {c['domains'].replace(' ', ', ')})")
+            cert_type = "Self-Signed/Manual" if c["is_self_signed"] else "Let's Encrypt"
+            options.append(f"{c['name']} ({cert_type} - Domains: {c['domains'].replace(' ', ', ')})")
             
         options.append("Back to Main Menu")
         
@@ -588,10 +807,11 @@ class CertbotWrapper:
         if selected_idx == len(certs):
             return
             
-        cert_to_delete = certs[selected_idx]["name"]
+        cert_data = certs[selected_idx]
+        cert_name = cert_data["name"]
         
         confirm = TerminalUI.ask_confirm(
-            f"Are you SURE you want to delete certificate '{cert_to_delete}'? This cannot be undone!",
+            f"Are you SURE you want to delete certificate '{cert_name}'? This cannot be undone!",
             default_yes=False
         )
         
@@ -599,14 +819,23 @@ class CertbotWrapper:
             TerminalUI.print_warning("Delete operation aborted.")
             return
             
-        cmd = f"certbot delete --cert-name {cert_to_delete}"
-        TerminalUI.print_info(f"Running: {cmd}")
-        
-        success = SystemManager.run_cmd_live(cmd)
-        if success:
-            TerminalUI.print_success(f"Certificate '{cert_to_delete}' has been deleted successfully.")
+        if cert_data["is_self_signed"]:
+            # Delete directory directly since Certbot doesn't manage it
+            try:
+                dir_to_remove = os.path.dirname(cert_data["cert_path"])
+                shutil.rmtree(dir_to_remove)
+                TerminalUI.print_success(f"Self-signed certificate '{cert_name}' and directory removed successfully.")
+            except Exception as e:
+                TerminalUI.print_error(f"Failed to delete self-signed certificate directory: {e}")
         else:
-            TerminalUI.print_error(f"Failed to delete certificate '{cert_to_delete}'.")
+            # Let certbot delete it
+            cmd = f"certbot delete --cert-name {cert_name}"
+            TerminalUI.print_info(f"Running: {cmd}")
+            success = SystemManager.run_cmd_live(cmd)
+            if success:
+                TerminalUI.print_success(f"Certificate '{cert_name}' has been deleted successfully.")
+            else:
+                TerminalUI.print_error(f"Failed to delete certificate '{cert_name}'.")
 
     @classmethod
     def configure_renewal_hooks(cls):
@@ -686,7 +915,7 @@ def main():
             
     while True:
         options = [
-            "Issue a new SSL Certificate",
+            "Issue a new SSL Certificate (Standard/Wildcard/IP)",
             "List all SSL Certificates",
             "Renew SSL Certificates",
             "Delete an SSL Certificate",

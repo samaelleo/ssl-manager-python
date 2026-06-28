@@ -9,6 +9,10 @@ A visually polished, zero-dependency interactive Python CLI tool to issue, list,
 ## 🌟 Features
 
 - **Interactive TUI Menu:** Navigate through options using arrow keys (or `j`/`k` Vim keys) and select with Enter.
+- **Multiple Certificate Types:**
+  - **Standard Domain:** Automated HTTP/Standalone issuance via Let's Encrypt.
+  - **Wildcard Domain:** Automated manual DNS challenge verification (covers both `domain.com` and `*.domain.com`).
+  - **IP Address:** Generates a secure self-signed SSL certificate with IP Subject Alternative Name (SAN) using OpenSSL.
 - **Zero External Dependencies:** Built entirely with Python's standard library. Works out-of-the-box on any Linux server.
 - **Auto-Installation:** Automatically detects your distribution package manager (`apt`, `dnf`, `yum`, `pacman`) and installs Certbot with Apache/Nginx plugins if they are missing.
 - **Polished Visuals:** Colored ANSI outputs for clean status messages, success/error banners, and a dynamic box-drawn certificates table.
@@ -30,10 +34,10 @@ TMP_FILE=$(mktemp) && curl -sSL https://raw.githubusercontent.com/samaelleo/ssl-
 
 ## 🛠 Menu Breakdown
 
-1. **Issue a new SSL Certificate:** Starts an interactive step-by-step wizard prompting for domains, recovery email, and authentication plugin (Nginx, Apache, Standalone, or Webroot). Allows performing a mock "Dry Run" test before issuing the live certificate.
-2. **List all SSL Certificates:** Parses Let's Encrypt certificates database and renders a beautiful terminal table with color-coded days remaining (Green for safe, Yellow for renewal warnings, Red for critical/expired).
+1. **Issue a new SSL Certificate:** Starts an interactive step-by-step wizard prompting for certificate type (Standard Domain, Wildcard Domain, or IP Address). For domains, it prompts for recovery email and validation plugin. Allows performing a mock "Dry Run" test.
+2. **List all SSL Certificates:** Parses Let's Encrypt certificates database and `/etc/letsencrypt/live` directories to render a beautiful terminal table with color-coded days remaining (Green for safe, Yellow for renewal warnings, Red for critical/expired). Lists both Let's Encrypt and Self-Signed IP certificates.
 3. **Renew SSL Certificates:** Triggers Certbot's renew command with interactive option for a Dry Run.
-4. **Delete an SSL Certificate:** Select a certificate from an interactive list and safely delete it.
+4. **Delete an SSL Certificate:** Select a certificate from an interactive list and safely delete it. For self-signed IP certificates, it automatically deletes their directory from the disk.
 5. **Configure Web Server Reload Hooks:** Automates writing a reload script to `/etc/letsencrypt/renewal-hooks/post/` that runs every time a certificate is successfully renewed, ensuring Nginx/Apache reloads and applies the new certificate.
 
 ---
@@ -51,6 +55,10 @@ Distributed under the MIT License. See [LICENSE](file:///c:/Users/Samael/Pycharm
 ## 🌟 ویژگی‌ها
 
 - **منوی تعاملی پیشرفته:** امکان پیمایش گزینه‌ها با کلیدهای جهت‌نمای بالا و پایین (یا کلیدهای Vim یعنی `j`/`k`) و انتخاب با کلید Enter.
+- **انواع مختلف گواهی‌نامه:**
+  - **دامنه استاندارد (Standard):** صدور خودکار با متدهای HTTP/Standalone توسط Let's Encrypt.
+  - **دامنه وایلدکارد (Wildcard):** صدور گواهی وایلدکارد (شامل `domain.com` و `*.domain.com`) از طریق تأیید رکورد DNS TXT به طور تعاملی.
+  - **آدرس آی‌پی (IP Address):** تولید گواهی خودامضا (Self-Signed) و ایمن با هدر IP SAN با استفاده از OpenSSL.
 - **بدون نیاز به نصب پکیج:** کاملاً با استفاده از کتابخانه‌های استاندارد پایتون نوشته شده و روی تمام سرورها فوراً اجرا می‌شود.
 - **نصب خودکار Certbot:** شناسایی خودکار مدیر بسته توزیع‌های مختلف لینوکس (`apt`, `dnf`, `yum`, `pacman`) و نصب برنامه Certbot همراه با پلاگین‌های وب‌سرور در صورت عدم وجود.
 - **ظاهر بصری و خوانا:** استفاده از کدهای رنگی استاندارد ANSI برای پیام‌ها، جدول‌های منظم متنی و کادرهای موفقیت/خطا.
@@ -72,8 +80,8 @@ TMP_FILE=$(mktemp) && curl -sSL https://raw.githubusercontent.com/samaelleo/ssl-
 
 ## 🛠 راهنمای گزینه‌های منو
 
-۱. **صدور گواهی SSL جدید (Issue):** راهنمای گام به گام جهت وارد کردن دامنه‌ها، ایمیل ارتباطی و متد احراز هویت (Nginx, Apache, Standalone, Webroot). همچنین امکان تست آزمایشی (Dry Run) قبل از صدور واقعی وجود دارد.
-۲. **لیست گواهی‌ها (List):** استخراج اطلاعات گواهی‌های فعال Let's Encrypt و نمایش آن‌ها در یک جدول متنی بسیار زیبا با رنگ‌بندی بر اساس روزهای باقی‌مانده تا انقضا (سبز: معتبر، زرد: نیاز به تمدید، قرمز: منقضی/بحرانی).
-۳. **تمدید گواهی‌ها (Renew):** تمدید دستی گواهی‌ها به همراه گزینه تست آزمایشی.
-۴. **حذف گواهی (Delete):** انتخاب و حذف کاملاً امن یکی از گواهی‌های فعال از لیست به صورت تعاملی.
-۵. **تنظیم هوک بارگذاری مجدد وب‌سرور (Hooks):** نوشتن خودکار اسکریپت بارگذاری مجدد وب‌سرور در پوشه `/etc/letsencrypt/renewal-hooks/post/` تا وب‌سرور بلافاصله پس از تمدید موفق گواهی‌ها، پیکربندی جدید را اعمال کند و از خطای انقضای کش وب‌سرور جلوگیری شود.
+۱. **صدور گواهی SSL جدید:** منوی تعاملی جهت انتخاب نوع گواهی (دامنه استاندارد، دامنه Wildcard، یا آدرس IP). در حالت دامنه، اطلاعات ایمیل و روش تأیید را دریافت کرده و امکان اجرای تست آزمایشی را فراهم می‌کند.
+۲. **لیست گواهی‌ها:** استخراج اطلاعات گواهی‌های فعال Let's Encrypt و مسیر `/etc/letsencrypt/live` و نمایش آن‌ها در یک جدول متنی بسیار زیبا همراه با هایلایت کردن تاریخ انقضا (این بخش هر دو نوع گواهی Let's Encrypt و آی‌پی خودامضا را نمایش می‌دهد).
+۳. **تمدید گواهی‌ها:** تمدید دستی گواهی‌ها به همراه گزینه تست آزمایشی.
+۴. **حذف گواهی:** انتخاب و حذف کاملاً امن یکی از گواهی‌های فعال از لیست. در مورد گواهی‌های خودامضای آی‌پی، پوشه مربوطه را مستقیماً از روی دیسک پاک می‌کند.
+۵. **تنظیم هوک بارگذاری مجدد وب‌سرور:** نوشتن خودکار اسکریپت بارگذاری مجدد وب‌سرور در پوشه `/etc/letsencrypt/renewal-hooks/post/` تا وب‌سرور بلافاصله پس از تمدید موفق گواهی‌ها، پیکربندی جدید را اعمال کند و از خطای انقضای کش وب‌سرور جلوگیری شود.
