@@ -527,28 +527,6 @@ class CertbotWrapper:
         print("\n" + table_str)
         return True
 
-    @classmethod
-    def issue_new_certificate(cls):
-        """Unified issuance wizard containing standard, wildcard, and self-signed IP options"""
-        TerminalUI.print_header("Issue SSL Certificate Wizard")
-        
-        wizard_options = [
-            "Standard Domain Certificate (Let's Encrypt Nginx/Apache/Standalone)",
-            "Wildcard Domain Certificate (Let's Encrypt manual DNS challenge)",
-            "IP Address Certificate (Self-Signed OpenSSL SAN)",
-            "Back to Main Menu"
-        ]
-        
-        choice = TerminalUI.select_menu("Select Certificate Type", wizard_options)
-        
-        if choice == 0:
-            cls.issue_standard_certificate()
-        elif choice == 1:
-            cls.issue_wildcard_certificate()
-        elif choice == 2:
-            cls.issue_ip_certificate()
-        elif choice == 3:
-            return
 
     @classmethod
     def issue_standard_certificate(cls):
@@ -699,7 +677,92 @@ class CertbotWrapper:
             TerminalUI.print_error("Certbot manual wildcard execution failed.")
 
     @classmethod
-    def issue_ip_certificate(cls):
+    def issue_letsencrypt_ip_certificate(cls):
+        """Issues a publicly trusted short-lived IP certificate using Let's Encrypt (Certbot v5.3+)"""
+        TerminalUI.print_header("Issue Let's Encrypt IP SSL")
+        TerminalUI.print_warning("Let's Encrypt IP SSL requires Certbot v5.3+ and is valid for only 6 DAYS.")
+        TerminalUI.print_info("Only public IPv4/IPv6 addresses are supported (no private IPs like 192.168.x.x).")
+        
+        ip = TerminalUI.ask_input("Enter your public IP address (e.g., 1.2.3.4)")
+        if not ip:
+            TerminalUI.print_warning("Operation cancelled.")
+            return
+            
+        # Basic validation (looks like IPv4 or IPv6)
+        if not re.match(r'^(\d{1,3}\.){3}\d{1,3}$', ip) and not ':' in ip:
+            TerminalUI.print_error("Invalid IP address format.")
+            return
+            
+        email = TerminalUI.ask_input("Enter email (for Let's Encrypt recovery & renewal warnings)")
+        if not email:
+            TerminalUI.print_warning("Operation cancelled.")
+            return
+            
+        methods = [
+            "Nginx Plugin (Auto-configure Nginx)",
+            "Apache Plugin (Auto-configure Apache)",
+            "Standalone Mode (Temporary web server - stops existing servers)",
+            "Webroot Mode (Provide path to existing webroot)"
+        ]
+        
+        method_idx = TerminalUI.select_menu("Select Validation Method", methods)
+        
+        cmd = [
+            "certbot", "certonly",
+            "--preferred-profile", "shortlived",
+            "--non-interactive",
+            "--agree-tos",
+            "--email", email,
+            "--ip-address", ip
+        ]
+        
+        if method_idx == 0:
+            cmd.append("--nginx")
+        elif method_idx == 1:
+            cmd.append("--apache")
+        elif method_idx == 2:
+            cmd.append("--standalone")
+            TerminalUI.print_warning("Standalone mode will temporarily bind to port 80. Ensure it is free.")
+        elif method_idx == 3:
+            webroot_path = TerminalUI.ask_input("Enter webroot path (e.g. /var/www/html)")
+            if not webroot_path or not os.path.exists(webroot_path):
+                TerminalUI.print_error("Invalid webroot directory path.")
+                return
+            cmd.extend(["--webroot", "-w", webroot_path])
+            
+        dry_run = TerminalUI.ask_confirm("Perform a test dry-run first?", default_yes=True)
+        if dry_run:
+            cmd.append("--dry-run")
+            
+        full_command = " ".join(cmd)
+        TerminalUI.print_info(f"Executing Command: {full_command}")
+        
+        print("\n" + "="*50 + " CERTBOT OUTPUT " + "="*50 + "\n")
+        success = SystemManager.run_cmd_live(full_command)
+        print("\n" + "="*116 + "\n")
+        
+        if success:
+            if dry_run:
+                TerminalUI.print_success("Dry-run succeeded! The parameters are valid.")
+                run_real = TerminalUI.ask_confirm("Would you like to issue the actual certificate now?", default_yes=True)
+                if run_real:
+                    cmd.remove("--dry-run")
+                    real_command = " ".join(cmd)
+                    TerminalUI.print_info("Issuing real short-lived IP certificate...")
+                    print("\n" + "="*50 + " CERTBOT OUTPUT " + "="*50 + "\n")
+                    real_success = SystemManager.run_cmd_live(real_command)
+                    print("\n" + "="*116 + "\n")
+                    if real_success:
+                        TerminalUI.print_success(f"Let's Encrypt SSL certificate for IP: {ip} issued successfully!")
+                    else:
+                        TerminalUI.print_error("Failed to issue Let's Encrypt IP SSL certificate.")
+            else:
+                TerminalUI.print_success(f"Let's Encrypt SSL certificate for IP: {ip} issued successfully!")
+        else:
+            TerminalUI.print_error("Certbot IP SSL command failed. Ensure Certbot is v5.3+ and IP is publicly accessible.")
+
+    @classmethod
+    def issue_self_signed_ip_certificate(cls):
         """Generates a self-signed SSL certificate with IP Subject Alternative Name (SAN) using OpenSSL"""
         TerminalUI.print_header("Issue IP Address SSL Certificate (Self-Signed)")
         
@@ -915,7 +978,10 @@ def main():
             
     while True:
         options = [
-            "Issue a new SSL Certificate (Standard/Wildcard/IP)",
+            "Issue Standard SSL Certificate (Domain)",
+            "Issue Wildcard SSL Certificate (DNS)",
+            "Issue IP Address SSL Certificate (Let's Encrypt - Short-lived 6 days)",
+            "Issue IP Address SSL Certificate (Self-Signed - 365 days)",
             "List all SSL Certificates",
             "Renew SSL Certificates",
             "Delete an SSL Certificate",
@@ -929,17 +995,23 @@ def main():
         TerminalUI.print_banner()
         
         if choice == 0:
-            CertbotWrapper.issue_new_certificate()
+            CertbotWrapper.issue_standard_certificate()
         elif choice == 1:
+            CertbotWrapper.issue_wildcard_certificate()
+        elif choice == 2:
+            CertbotWrapper.issue_letsencrypt_ip_certificate()
+        elif choice == 3:
+            CertbotWrapper.issue_self_signed_ip_certificate()
+        elif choice == 4:
             TerminalUI.print_header("Active SSL Certificates")
             CertbotWrapper.display_certificates()
-        elif choice == 2:
-            CertbotWrapper.renew_certificates()
-        elif choice == 3:
-            CertbotWrapper.delete_certificate()
-        elif choice == 4:
-            CertbotWrapper.configure_renewal_hooks()
         elif choice == 5:
+            CertbotWrapper.renew_certificates()
+        elif choice == 6:
+            CertbotWrapper.delete_certificate()
+        elif choice == 7:
+            CertbotWrapper.configure_renewal_hooks()
+        elif choice == 8:
             TerminalUI.clear_screen()
             print(f"\n{Colors.BOLD}{Colors.GREEN}Thank you for using SSL Manager! Goodbye.{Colors.RESET}\n")
             break
