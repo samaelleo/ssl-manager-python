@@ -24,7 +24,7 @@ To run this tool directly on your remote Linux server:
 
 1. **Download the script:**
    ```bash
-   curl -sSL https://raw.githubusercontent.com/<YOUR_GITHUB_USERNAME>/<YOUR_REPO_NAME>/main/ssl_manager.py -o ssl_manager.py
+   curl -sSL https://raw.githubusercontent.com/samaelleo/ssl-manager-python/main/ssl_manager.py -o ssl_manager.py
    ```
 
 2. **Make it executable:**
@@ -77,7 +77,7 @@ Distributed under the MIT License. See [LICENSE](file:///c:/Users/Samael/Pycharm
 
 ۱. **دانلود اسکریپت:**
    ```bash
-   curl -sSL https://raw.githubusercontent.com/<YOUR_GITHUB_USERNAME>/<YOUR_REPO_NAME>/main/ssl_manager.py -o ssl_manager.py
+   curl -sSL https://raw.githubusercontent.com/samaelleo/ssl-manager-python/main/ssl_manager.py -o ssl_manager.py
    ```
 
 ۲. **ایجاد دسترسی اجرا:**
