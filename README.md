@@ -18,24 +18,13 @@ A visually polished, zero-dependency interactive Python CLI tool to issue, list,
 
 ---
 
-## 🚀 Quick Start / installation
+To run this tool directly on your remote Linux server without saving a permanent copy of the file:
 
-To run this tool directly on your remote Linux server:
+```bash
+TMP_FILE=$(mktemp) && curl -sSL https://raw.githubusercontent.com/samaelleo/ssl-manager-python/main/ssl_manager.py -o "$TMP_FILE" && sudo python3 "$TMP_FILE"; rm -f "$TMP_FILE"
+```
 
-1. **Download the script:**
-   ```bash
-   curl -sSL https://raw.githubusercontent.com/samaelleo/ssl-manager-python/main/ssl_manager.py -o ssl_manager.py
-   ```
-
-2. **Make it executable:**
-   ```bash
-   chmod +x ssl_manager.py
-   ```
-
-3. **Run with sudo (required for Certbot actions):**
-   ```bash
-   sudo ./ssl_manager.py
-   ```
+*Note: The script downloads to a temporary file, executes with root privileges, and is automatically deleted when the CLI exits (even if interrupted).*
 
 ---
 
@@ -71,24 +60,13 @@ Distributed under the MIT License. See [LICENSE](file:///c:/Users/Samael/Pycharm
 
 ---
 
-## 🚀 راه اندازی سریع و اجرا
+برای اجرای مستقیم ابزار روی سرور لینوکس خود بدون ذخیره دائمی فایل اسکریپت:
 
-برای اجرای سریع ابزار روی سرور لینوکس خود دستورات زیر را وارد کنید:
+```bash
+TMP_FILE=$(mktemp) && curl -sSL https://raw.githubusercontent.com/samaelleo/ssl-manager-python/main/ssl_manager.py -o "$TMP_FILE" && sudo python3 "$TMP_FILE"; rm -f "$TMP_FILE"
+```
 
-۱. **دانلود اسکریپت:**
-   ```bash
-   curl -sSL https://raw.githubusercontent.com/samaelleo/ssl-manager-python/main/ssl_manager.py -o ssl_manager.py
-   ```
-
-۲. **ایجاد دسترسی اجرا:**
-   ```bash
-   chmod +x ssl_manager.py
-   ```
-
-۳. **اجرا با دسترسی مدیریت (نیاز به sudo جهت مدیریت گواهی‌ها):**
-   ```bash
-   sudo ./ssl_manager.py
-   ```
+*توضیح: این دستور اسکریپت را در یک فایل موقت دانلود و اجرا کرده و بلافاصله پس از بسته شدن برنامه (حتی در صورت بروز خطا یا لغو با Ctrl+C) فایل موقت را به طور کامل حذف می‌کند.*
 
 ---
 
