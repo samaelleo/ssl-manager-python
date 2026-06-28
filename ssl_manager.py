@@ -571,32 +571,46 @@ class CertbotWrapper:
         
         method_idx = TerminalUI.select_menu("Select Validation Method", methods)
         
-        cmd = ["certbot", "certonly", "--non-interactive", "--agree-tos", "--email", email]
-        if ca_server:
-            cmd.extend(["--server", ca_server])
-            
-        for d in domains:
-            cmd.extend(["-d", d])
-            
-        if method_idx == 0:
-            cmd.append("--nginx")
-        elif method_idx == 1:
-            cmd.append("--apache")
-        elif method_idx == 2:
-            cmd.append("--standalone")
+        # In Standalone mode, warn about port 80
+        if method_idx == 2:
             TerminalUI.print_warning("Standalone mode will temporarily bind to port 80. Ensure it is free.")
-        elif method_idx == 3:
+            
+        webroot_path = ""
+        if method_idx == 3:
             webroot_path = TerminalUI.ask_input("Enter webroot path (e.g. /var/www/html)")
             if not webroot_path or not os.path.exists(webroot_path):
                 TerminalUI.print_error("Invalid webroot directory path.")
                 return
-            cmd.extend(["--webroot", "-w", webroot_path])
-            
+                
         dry_run = TerminalUI.ask_confirm("Perform a test dry-run first?", default_yes=True)
         
-        if dry_run:
-            cmd.append("--dry-run")
+        # Helper to construct certbot command
+        def build_cmd(is_dry):
+            server_url = ca_server
+            if is_dry and ca_name == "buypass":
+                server_url = "https://api.test4.buypass.no/acme/directory"
+                
+            command = ["certbot", "certonly", "--non-interactive", "--agree-tos", "--email", email]
+            if server_url:
+                command.extend(["--server", server_url])
+                
+            for d in domains:
+                command.extend(["-d", d])
+                
+            if method_idx == 0:
+                command.append("--nginx")
+            elif method_idx == 1:
+                command.append("--apache")
+            elif method_idx == 2:
+                command.append("--standalone")
+            elif method_idx == 3:
+                command.extend(["--webroot", "-w", webroot_path])
+                
+            if is_dry:
+                command.append("--dry-run")
+            return command
             
+        cmd = build_cmd(dry_run)
         full_command = " ".join(cmd)
         TerminalUI.print_info(f"Executing Command: {full_command}")
         
@@ -610,8 +624,8 @@ class CertbotWrapper:
                 
                 run_real = TerminalUI.ask_confirm("Would you like to issue the actual certificate now?", default_yes=True)
                 if run_real:
-                    cmd.remove("--dry-run")
-                    real_command = " ".join(cmd)
+                    real_cmd = build_cmd(is_dry=False)
+                    real_command = " ".join(real_cmd)
                     TerminalUI.print_info("Issuing real certificate...")
                     print("\n" + "="*50 + " CERTBOT OUTPUT " + "="*50 + "\n")
                     real_success = SystemManager.run_cmd_live(real_command)
@@ -645,22 +659,31 @@ class CertbotWrapper:
             TerminalUI.print_warning("Operation cancelled.")
             return
             
-        cmd = [
-            "certbot", "certonly",
-            "--manual",
-            "--preferred-challenges", "dns",
-            "--email", email,
-            "--agree-tos",
-            "-d", domain,
-            "-d", f"*.{domain}"
-        ]
-        if ca_server:
-            cmd.extend(["--server", ca_server])
-            
         dry_run = TerminalUI.ask_confirm("Perform a test dry-run first?", default_yes=True)
-        if dry_run:
-            cmd.append("--dry-run")
+        
+        # Helper to construct wildcard command
+        def build_wildcard_cmd(is_dry):
+            server_url = ca_server
+            if is_dry and ca_name == "buypass":
+                server_url = "https://api.test4.buypass.no/acme/directory"
+                
+            command = [
+                "certbot", "certonly",
+                "--manual",
+                "--preferred-challenges", "dns",
+                "--email", email,
+                "--agree-tos",
+                "-d", domain,
+                "-d", f"*.{domain}"
+            ]
+            if server_url:
+                command.extend(["--server", server_url])
+                
+            if is_dry:
+                command.append("--dry-run")
+            return command
             
+        cmd = build_wildcard_cmd(dry_run)
         full_command = " ".join(cmd)
         
         TerminalUI.print_info("Wildcard SSL requires creating a DNS TXT record in your DNS provider.")
@@ -678,8 +701,8 @@ class CertbotWrapper:
                 TerminalUI.print_success("Dry-run wildcard validation succeeded!")
                 run_real = TerminalUI.ask_confirm("Issue the actual wildcard certificate now?", default_yes=True)
                 if run_real:
-                    cmd.remove("--dry-run")
-                    real_command = " ".join(cmd)
+                    real_cmd = build_wildcard_cmd(is_dry=False)
+                    real_command = " ".join(real_cmd)
                     print("\n" + "="*50 + " CERTBOT MANUAL DNS " + "="*50 + "\n")
                     real_success = SystemManager.run_cmd_live(real_command)
                     print("\n" + "="*116 + "\n")
